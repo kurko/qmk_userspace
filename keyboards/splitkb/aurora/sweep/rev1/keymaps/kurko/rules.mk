@@ -1,3 +1,6 @@
+COMBO_ENABLE = yes
+COMBO_ACTION_ENABLE = yes
+
 OLED_ENABLE = false
 OLED_DRIVER = SSD1306      # Enables the use of OLED displays
 ENCODER_ENABLE = false       # Enables the use of one or more encoders

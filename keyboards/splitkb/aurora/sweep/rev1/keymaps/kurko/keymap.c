@@ -79,12 +79,17 @@ enum custom_keycodes {
     G_OR_HOLD_QUOT,
     SEMICOLON_OR_HOLD_ENTER,
     Z_OR_HOLD_GRV,
+    END_TAP_HOLD_CUSTOM_KEYCODES, // Marks the end of tap-hold keycodes
+
+    KC_MEH_SPC,    // Custom keycode for MEH_T(KC_SPC)
+    KC_OSM_LSFT,   // Custom keycode for OSM(MOD_LSFT)
+
     //...
     END_CUSTOM_KEYCODES, // Always keep this one at the end!
 };
 
 // Replace 10 with the number of custom keycodes we have
-#define CUSTOM_KEYCODES_LENGTH (END_CUSTOM_KEYCODES - SAFE_RANGE)
+#define CUSTOM_KEYCODES_LENGTH (END_TAP_HOLD_CUSTOM_KEYCODES - Q_1)
 
 /**
  * Custom keycodes
@@ -155,7 +160,30 @@ tap_dance_action_t tap_dance_actions[] = {
  * The notation `mod/tap` denotes a key that activates the modifier `mod` when held down, and
  * produces the key `tap` when tapped (i.e. pressed and released).
  */
-#define ALT_ENT  MT(MOD_LALT, KC_ENT)
+#define ALT_ENT MT(MOD_LALT, KC_ENT)
+
+/**
+ * Combos
+ *
+ * These are a way to trigger a sequence of keycodes when a specific combination
+ * of keys are pressed.
+ *
+ * For example, when pressing MEH+LSFT, it outputs Ctrl+Alt.
+ */
+enum combos {
+    MEH_LSFT_CTRL_ALT, // MEH+LSFT outputs Ctrl+Alt: used for Rectangle app
+    COMBO_LENGTH
+};
+
+const uint16_t PROGMEM ctrl_alt_combo[] = {KC_MEH_SPC, KC_OSM_LSFT, COMBO_END};
+
+combo_t key_combos[] = {
+    // COMBO_ACTION means that it will be handled by the process_combo_event
+    // function.
+    [MEH_LSFT_CTRL_ALT] = COMBO_ACTION(ctrl_alt_combo),
+};
+
+#define COMBO_COUNT COMBO_LENGTH
 
 /*
  * This is the configuration of each key. Some of the keys codes are custom,
@@ -177,8 +205,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         A_OR_HOLD_TAB, KC_S, D_OR_LALT, F_OR_LGUI, G_OR_HOLD_QUOT,  KC_H, J_OR_RGUI, K_OR_RALT, KC_L,   SEMICOLON_OR_HOLD_ENTER,
         Z_OR_HOLD_GRV, KC_X, KC_C,      KC_V,      KC_B,            KC_N, KC_M,      KC_COMM,   KC_DOT, TD(TD_SLSH_BSLS),
 
-        // Thumb keys
-        MEH_T(KC_SPC), OSM(MOD_LSFT), CTL_ESC, TO(_LAYER2)
+        // Thumb keys - custom keycodes
+        KC_MEH_SPC, KC_OSM_LSFT, CTL_ESC, TO(_LAYER2)
     ),
 
     /*
@@ -270,9 +298,31 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     }
 }
 
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    bool is_custom_keycode = keycode >= Q_1 && keycode < END_CUSTOM_KEYCODES;
+    switch (keycode) {
+        case KC_MEH_SPC:
+            if (record->event.pressed) {
+                // Start MEH (Ctrl+Alt+Shift)
+                register_mods(MOD_LCTL | MOD_LALT | MOD_LSFT);
+            } else {
+                // Stop MEH
+                unregister_mods(MOD_LCTL | MOD_LALT | MOD_LSFT);
+                tap_code(KC_SPC); // Send Space when released
+            }
+            break;
+
+        case KC_OSM_LSFT:
+            if (record->event.pressed) {
+                // Start One-Shot Shift
+                add_oneshot_mods(MOD_LSFT);
+            }
+            break;
+
+        default:
+            break; // Process all other keycodes normally
+    }
+
+    bool is_custom_keycode = keycode >= Q_1 && keycode < END_TAP_HOLD_CUSTOM_KEYCODES;
     /**
      * TAP-HOLD: CANCEL HOLD ON ANOTHER KEY ON FAST SEQUENCE
      *
@@ -371,6 +421,23 @@ void matrix_scan_user(void) {
         if (last_input_activity_elapsed() > 7000) {
             layer_clear();
         }
+    }
+}
+
+/**
+ * What happens when a combo is pressed
+ */
+void process_combo_event(uint16_t combo_index, bool pressed) {
+    switch (combo_index) {
+        case MEH_LSFT_CTRL_ALT:
+            if (pressed) {
+                register_code(KC_LCTL);
+                register_code(KC_LALT);
+            } else {
+                unregister_code(KC_LCTL);
+                unregister_code(KC_LALT);
+            }
+            break;
     }
 }
 
