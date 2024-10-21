@@ -293,30 +293,52 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case CTL_ESC:
             return 130;
+        case KC_MEH_SPC:
+            return 150;
         default:
             return TAPPING_TERM;
     }
 }
 
+// Tap-Hold Variables for KC_MEH_SPC
+static uint16_t meh_spc_timer = 0;
+static bool meh_spc_active = false;
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
+
+        /**
+         * This key is interesting. It's:
+         *
+         * - It registers Ctrl+Alt+Shift when held down (MEH modifiers)
+         * - It sends Space when tapped
+         * - It registers Ctrl+Alt when pressed with LSFT (to mimic the Mac's,
+         *   so I can use Rectangle.app more conveniently)
+         *
+         * Because it's a mix of Tap-Hold and Combo, we need to define the
+         * behavior ourselves.
+         */
         case KC_MEH_SPC:
             if (record->event.pressed) {
-                // Start MEH (Ctrl+Alt+Shift)
-                register_mods(MOD_LCTL | MOD_LALT | MOD_LSFT);
+                meh_spc_timer = timer_read();
+                meh_spc_active = true;
             } else {
-                // Stop MEH
-                unregister_mods(MOD_LCTL | MOD_LALT | MOD_LSFT);
-                tap_code(KC_SPC); // Send Space when released
+                meh_spc_active = false;
+                if (timer_elapsed(meh_spc_timer) < TAPPING_TERM) {
+                    // It's a tap, send Space
+                    tap_code(KC_SPC);
+                } else {
+                    // It's a hold, unregister MEH modifiers
+                    unregister_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LSFT));
+                }
             }
-            break;
+            return false; // Skip further processing
 
         case KC_OSM_LSFT:
             if (record->event.pressed) {
                 // Start One-Shot Shift
                 add_oneshot_mods(MOD_LSFT);
             }
-            break;
+            return false;
 
         default:
             break; // Process all other keycodes normally
@@ -394,6 +416,14 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
  * released.
  */
 void matrix_scan_user(void) {
+
+    // Handle tap-hold logic for KC_MEH_SPC
+    if (meh_spc_active && timer_elapsed(meh_spc_timer) > TAPPING_TERM) {
+        // It's a hold, register MEH modifiers
+        register_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LSFT));
+        meh_spc_active = false; // Prevent re-registering
+    }
+
     /**
      * Don't do anything unless we have initialized the system and some custom
      * key is pressed.
@@ -426,6 +456,8 @@ void matrix_scan_user(void) {
 
 /**
  * What happens when a combo is pressed
+ *
+ * (What is a combo? It's a sequence of keys that triggers a specific action.)
  */
 void process_combo_event(uint16_t combo_index, bool pressed) {
     switch (combo_index) {

@@ -18,6 +18,8 @@
 // otherwise the other promicro v3 isn't found
 #define SPLIT_USB_DETECT
 
+#define PERMISSIVE_HOLD
+
 #ifdef ENCODER_ENABLE
 #    define ENCODER_RESOLUTIONS { 2 }
 #    define ENCODER_RESOLUTIONS_RIGHT { 2 }
