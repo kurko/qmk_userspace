@@ -34,7 +34,7 @@
 #endif
 
 // https://docs.qmk.fm/#/tap_hold?id=tapping-term
-#define TAPPING_TERM 200
+#define TAPPING_TERM 170
 #define TAPPING_TERM_PER_KEY
 
 #define ONESHOT_TAP_TOGGLE 2

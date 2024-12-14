@@ -46,6 +46,8 @@
  *   backslash.
  */
 #include QMK_KEYBOARD_H
+// Used with qmk console
+#include "print.h"
 
 enum layers {
     _LAYER1 = 0,
@@ -263,6 +265,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 void keyboard_post_init_user(void) {
+    debug_enable = true;
+    debug_matrix = true;
+
     /*
      * Initialize the custom keycodes timer array. This is used to keep track of
      * how long a key has been held down for.
@@ -303,21 +308,26 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
 // Tap-Hold Variables for KC_MEH_SPC
 static uint16_t meh_spc_timer = 0;
 static bool meh_spc_active = false;
+// Variables to track Shift state
+static bool is_shift_pressed = false;
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
 
         /**
-         * This key is interesting. It's:
+         * This key is interesting. It:
          *
-         * - It registers Ctrl+Alt+Shift when held down (MEH modifiers)
-         * - It sends Space when tapped
-         * - It registers Ctrl+Alt when pressed with LSFT (to mimic the Mac's,
+         * - registers Ctrl+Alt+Shift when held down (MEH modifiers)
+         * - sends Space when tapped
+         * - registers Ctrl+Alt when pressed with LSFT (to mimic the Mac's,
          *   so I can use Rectangle.app more conveniently)
          *
          * Because it's a mix of Tap-Hold and Combo, we need to define the
          * behavior ourselves.
          */
         case KC_MEH_SPC:
+
+            dprint("#process_record_user KC_MEH_SPC");
             if (record->event.pressed) {
                 meh_spc_timer = timer_read();
                 meh_spc_active = true;
@@ -334,9 +344,15 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false; // Skip further processing
 
         case KC_OSM_LSFT:
+            dprint("#process_record_user KC_OSM_LSFT");
             if (record->event.pressed) {
-                // Start One-Shot Shift
-                add_oneshot_mods(MOD_LSFT);
+                // Key pressed: register Shift modifier
+                is_shift_pressed = true;
+                register_mods(MOD_BIT(KC_LSFT));
+            } else {
+                // Key released: unregister Shift modifier
+                is_shift_pressed = false;
+                unregister_mods(MOD_BIT(KC_LSFT));
             }
             return false;
 
@@ -463,11 +479,24 @@ void process_combo_event(uint16_t combo_index, bool pressed) {
     switch (combo_index) {
         case MEH_LSFT_CTRL_ALT:
             if (pressed) {
-                register_code(KC_LCTL);
-                register_code(KC_LALT);
+                dprint("MEH_LSFT_CTRL_ALT pressed");
+                // Combo (MEH+LSFT) pressed: register Ctrl+Alt
+                register_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT));
+                // Optionally, unregister other modifiers
+                if (is_shift_pressed) {
+                    dprint("MEH_LSFT_CTRL_ALT is_shift_pressed=true");
+                    unregister_mods(MOD_BIT(KC_LSFT));
+                    is_shift_pressed = false;
+                }
             } else {
-                unregister_code(KC_LCTL);
-                unregister_code(KC_LALT);
+                dprint("MEH_LSFT_CTRL_ALT not pressed");
+                // Combo released: unregister Ctrl+Alt
+                unregister_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT));
+                // Re-register Shift if it was pressed before
+                if (is_shift_pressed) {
+                    dprint("MEH_LSFT_CTRL_ALT is_shift_pressed=true 2");
+                    register_mods(MOD_BIT(KC_LSFT));
+                }
             }
             break;
     }
