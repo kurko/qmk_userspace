@@ -334,8 +334,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             } else {
                 meh_spc_active = false;
                 if (timer_elapsed(meh_spc_timer) < TAPPING_TERM) {
-                    // It's a tap, send Space
-                    tap_code(KC_SPC);
+                    // Legacy: tap_code(KC_SPC) was adding a long delay
+                    //
+                    // Send Space
+                    register_code(KC_SPC);
+                    unregister_code(KC_SPC);
                 } else {
                     // It's a hold, unregister MEH modifiers
                     unregister_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LSFT));
