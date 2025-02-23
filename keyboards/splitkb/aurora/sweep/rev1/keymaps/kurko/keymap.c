@@ -1,23 +1,12 @@
-/* Copyright 2023 Alex Oliveira <@kurko>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 /*
+ * ---------------------------------------------------------------------
+ */
+/*
+ * This code control the Splitkb's Sweep Aurora.
+ *
  * The Sweep is a very small keyboard with 34 keys. It doesn't have a lot of
- * room for lots of keys everywhere, so we have to be creative and configure
- * multiple functionalities for each key.
+ * room for keys, so we have to be creative and configure multiple
+ * functionalities for each key.
  *
  * Here are some of the specific tactics employed to get the most out of this
  * keyboard layout with so few keys:
@@ -53,7 +42,6 @@ enum layers {
     _LAYER3,
     _LAYER4,
 };
-
 
 /**
  * CUSTOM KEYCODES
@@ -294,7 +282,7 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
         case CTL_ESC:
             return 130;
         case KC_MEH_SPC:
-            return 150;
+            return 100;
         default:
             return TAPPING_TERM;
     }
@@ -324,8 +312,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             } else {
                 meh_spc_active = false;
                 if (timer_elapsed(meh_spc_timer) < TAPPING_TERM) {
-                    // It's a tap, send Space
-                    tap_code(KC_SPC);
+                    register_code16(KC_SPC);
+                    unregister_code16(KC_SPC);
                 } else {
                     // It's a hold, unregister MEH modifiers
                     unregister_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LSFT));
@@ -418,7 +406,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 void matrix_scan_user(void) {
 
     // Handle tap-hold logic for KC_MEH_SPC
-    if (meh_spc_active && timer_elapsed(meh_spc_timer) > TAPPING_TERM) {
+    if (meh_spc_active && timer_elapsed(meh_spc_timer) >= TAPPING_TERM) {
         // It's a hold, register MEH modifiers
         register_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LSFT));
         meh_spc_active = false; // Prevent re-registering
@@ -435,7 +423,7 @@ void matrix_scan_user(void) {
                     !custom_keys_tapped[keyIndex]
                ) {
 
-                tap_code_delay(custom_keys[keyIndex][1], 250);
+                tap_code(custom_keys[keyIndex][1]);
                 custom_keys_timer[keyIndex] = 0;
                 custom_keys_tapped[keyIndex] = true;
                 is_custom_key_pressed = false;
