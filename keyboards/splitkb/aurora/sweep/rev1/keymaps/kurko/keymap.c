@@ -15,6 +15,9 @@
  */
 
 /*
+ ******************************************************************************
+ */
+/*
  * The Sweep is a very small keyboard with 34 keys. It doesn't have a lot of
  * room for lots of keys everywhere, so we have to be creative and configure
  * multiple functionalities for each key.
@@ -46,8 +49,8 @@
  *   backslash.
  */
 #include QMK_KEYBOARD_H
-// Used with qmk console
-#include "print.h"
+// Include wait.h for wait_ms function
+#include "wait.h"
 
 enum layers {
     _LAYER1 = 0,
@@ -299,7 +302,7 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
         case CTL_ESC:
             return 130;
         case KC_MEH_SPC:
-            return 150;
+            return 100;
         default:
             return TAPPING_TERM;
     }
@@ -308,7 +311,11 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
 // Tap-Hold Variables for KC_MEH_SPC
 static uint16_t meh_spc_timer = 0;
 static bool meh_spc_active = false;
-// Variables to track Shift state
+// Variables to track Shift state. We use this to decide when to unregister it.
+//
+// - If Shift is pressed, and we press KC_SPC immediatelly, meaning both keys
+// are pressed, we want to output LALT+LCTL (used for the Rectangle.app). The
+// Shift key is therefore unregistered.
 static bool is_shift_pressed = false;
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -326,8 +333,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
          * behavior ourselves.
          */
         case KC_MEH_SPC:
-
-            dprint("#process_record_user KC_MEH_SPC");
             if (record->event.pressed) {
                 meh_spc_timer = timer_read();
                 meh_spc_active = true;
@@ -338,6 +343,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                     //
                     // Send Space
                     register_code(KC_SPC);
+                    wait_ms(35);
                     unregister_code(KC_SPC);
                 } else {
                     // It's a hold, unregister MEH modifiers
@@ -347,7 +353,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false; // Skip further processing
 
         case KC_OSM_LSFT:
-            dprint("#process_record_user KC_OSM_LSFT");
             if (record->event.pressed) {
                 // Key pressed: register Shift modifier
                 is_shift_pressed = true;
@@ -368,7 +373,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
      * TAP-HOLD: CANCEL HOLD ON ANOTHER KEY ON FAST SEQUENCE
      *
      * If we're holding a tap-hold custom key and another key is pressed, we
-     * should cancel the hold on the custom key.
+     * should cancel/interrupt the hold on the custom key.
      *
      * For example, Q tapped is Q and Q held is 1. If we are holding Q and
      * immediately type U, we cancel the hold on Q, send Q instead of 1, and
@@ -383,7 +388,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             custom_key_down >= 0 &&
             record->event.pressed
        ) {
-        tap_code(custom_keys[custom_key_down][0]);
+        register_code(custom_keys[custom_key_down][0]);
+        wait_ms(35);
+        unregister_code(custom_keys[custom_key_down][0]);
+
+        // tap_code(custom_keys[custom_key_down][0]);
         custom_keys_tapped[custom_key_down] = true;
         custom_keys_timer[custom_key_down] = 0;
         custom_key_down = 0;
@@ -409,12 +418,39 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             custom_keys_tapped[keyIndex] = false;
 
         /**
-         * When released and not yet processed by matrix_scan_user() (which sets
+         * Process key being released
+         *
+         * When it has not yet been processed by matrix_scan_user() (which sets
          * custom_keys_tapped), it means that the key was tapped before
          * TAPPING_TERM, so we send the 'letter' keycode.
          */
-        } else if(!custom_keys_tapped[keyIndex]) {
-            tap_code(custom_keys[keyIndex][0]);
+        } else {
+
+            if (!custom_keys_tapped[keyIndex] && timer_elapsed(custom_keys_timer[keyIndex]) < TAPPING_TERM) {
+                register_code(custom_keys[keyIndex][0]);
+
+               /*
+                * Problem: During fast typing, letters appeared out of order due
+                * to custom keys (e.g., Q_1, KC_MEH_SPC) sending "down" and "up"
+                * events almost instantly (~9ms), while standard keys (e.g.,
+                * KC_S) reflected physical press time (~40ms).
+                *
+                * Solution: Added `wait_ms(35)` between "down" and "up" for
+                * custom key taps to match standard key timing more closely
+                * (~35ms duration).
+                *
+                * Timing clarification:
+                * - Original 9ms was processing time, not a delay (effectively
+                *   0ms).
+                * - `wait_ms(35)` sets the duration to ~35ms, not 9ms + 35ms.
+                *
+                * This improves timing consistency across keys, reducing
+                * out-of-order issues.
+                */
+                wait_ms(35);
+                unregister_code(custom_keys[keyIndex][0]);
+            }
+
             is_custom_key_pressed = false;
             custom_keys_timer[keyIndex] = 0;
             custom_keys_tapped[keyIndex] = true;
@@ -454,7 +490,7 @@ void matrix_scan_user(void) {
                     !custom_keys_tapped[keyIndex]
                ) {
 
-                tap_code_delay(custom_keys[keyIndex][1], 250);
+                tap_code(custom_keys[keyIndex][1]);
                 custom_keys_timer[keyIndex] = 0;
                 custom_keys_tapped[keyIndex] = true;
                 is_custom_key_pressed = false;
@@ -482,22 +518,18 @@ void process_combo_event(uint16_t combo_index, bool pressed) {
     switch (combo_index) {
         case MEH_LSFT_CTRL_ALT:
             if (pressed) {
-                dprint("MEH_LSFT_CTRL_ALT pressed");
                 // Combo (MEH+LSFT) pressed: register Ctrl+Alt
                 register_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT));
                 // Optionally, unregister other modifiers
                 if (is_shift_pressed) {
-                    dprint("MEH_LSFT_CTRL_ALT is_shift_pressed=true");
                     unregister_mods(MOD_BIT(KC_LSFT));
                     is_shift_pressed = false;
                 }
             } else {
-                dprint("MEH_LSFT_CTRL_ALT not pressed");
                 // Combo released: unregister Ctrl+Alt
                 unregister_mods(MOD_BIT(KC_LCTL) | MOD_BIT(KC_LALT));
                 // Re-register Shift if it was pressed before
                 if (is_shift_pressed) {
-                    dprint("MEH_LSFT_CTRL_ALT is_shift_pressed=true 2");
                     register_mods(MOD_BIT(KC_LSFT));
                 }
             }
