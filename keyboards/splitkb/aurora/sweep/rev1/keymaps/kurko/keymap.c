@@ -91,6 +91,7 @@ enum custom_keycodes {
 
     //...
     END_CUSTOM_KEYCODES, // Always keep this one at the end!
+    DEBUG_LOOP, // Custom keycode for debugging
 };
 
 // Replace 10 with the number of custom keycodes we have
@@ -268,8 +269,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 void keyboard_post_init_user(void) {
-    debug_enable = true;
-    debug_matrix = true;
+    debug_enable   = false;
+    debug_matrix   = false;
+    debug_keyboard = false;
 
     /*
      * Initialize the custom keycodes timer array. This is used to keep track of
@@ -302,11 +304,30 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
         case CTL_ESC:
             return 130;
         case KC_MEH_SPC:
-            return 100;
+            return 60;
         default:
             return TAPPING_TERM;
     }
 }
+
+
+/**
+ * Play a custom key (press + release) through your own code
+ */
+static void play_key(bool pressed, uint16_t kc) {
+    keyrecord_t rec = {0};
+    rec.event.pressed = pressed;
+    rec.event.time    = timer_read();
+
+    bool send = process_record_user(kc, &rec);    // run your logic
+    if (!send) return;                            // swallowed
+
+    if (pressed)   register_code16(kc);           // forward to USB
+    else           unregister_code16(kc);
+}
+
+#define press(kc)   play_key(true,  (kc))
+#define release(kc) play_key(false, (kc))
 
 // Tap-Hold Variables for KC_MEH_SPC
 static uint16_t meh_spc_timer = 0;
@@ -322,6 +343,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
 
         /**
+         * Tap-Hold: KC_MEH_SPC
+         *
          * This key is interesting. It:
          *
          * - registers Ctrl+Alt+Shift when held down (MEH modifiers)
@@ -343,7 +366,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                     //
                     // Send Space
                     register_code(KC_SPC);
-                    wait_ms(35);
+                    wait_ms(1);
                     unregister_code(KC_SPC);
                 } else {
                     // It's a hold, unregister MEH modifiers
@@ -364,13 +387,51 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             return false;
 
+
+        /**
+         * Simulates taping keys in sequence for testing.
+         */
+        case T_5:
+            if (record->event.pressed) {
+                // Only run when MEH modifiers are down
+                uint8_t mods = get_mods();
+                if ((mods & (MOD_LCTL|MOD_LALT|MOD_LSFT)) == (MOD_LCTL|MOD_LALT|MOD_LSFT)) {
+                    // Temporarily clear modifiers so our taps are unmodified
+                    clear_mods();
+
+                    // 10× RES with tiny spacing
+                    for (int i = 0; i < 10; i++) {
+                        press( R_4 );          // R‑down  (starts potential hold)
+                        wait_ms(50);            // ≤ TAPPING_TERM but long enough
+
+                        press( E_3 );          // E‑down while R still held  → hits
+                        wait_ms(50);            // ≤ TAPPING_TERM but long enough
+
+                        release( R_4 );        // now lift R
+                        wait_ms(50);            // ≤ TAPPING_TERM but long enough
+
+                        press( KC_S );         // plain S
+                                               //
+                        release( E_3 );        //     your “cancel‑R” path
+                        release( KC_S );
+
+                        wait_ms(10);           // tiny gap before next iteration
+                    }
+
+                    // Restore the MEH modifiers
+                    set_mods(mods);
+                    return false;  // swallow the T itself
+                }
+            }
+            break;
+
         default:
             break; // Process all other keycodes normally
     }
 
     bool is_custom_keycode = keycode >= Q_1 && keycode < END_TAP_HOLD_CUSTOM_KEYCODES;
     /**
-     * TAP-HOLD: CANCEL HOLD ON ANOTHER KEY ON FAST SEQUENCE
+     * TAP-HOLD (1 / 2): CANCEL HOLD ON ANOTHER KEY ON FAST SEQUENCE
      *
      * If we're holding a tap-hold custom key and another key is pressed, we
      * should cancel/interrupt the hold on the custom key.
@@ -383,24 +444,24 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
      * keep the modifier held). That's why we're not using modified for this
      * custom tap-held code. For those we use `MT(MOD_LCTL, KC_ESC)`.
      */
-    if (
-            is_custom_key_pressed &&
-            custom_key_down >= 0 &&
-            record->event.pressed
-       ) {
-        register_code(custom_keys[custom_key_down][0]);
-        wait_ms(35);
-        unregister_code(custom_keys[custom_key_down][0]);
+    if (is_custom_key_pressed &&
+        custom_key_down >= 0 &&
+        record->event.pressed)
+    {
 
-        // tap_code(custom_keys[custom_key_down][0]);
+        // Immediately send the letter (down+up) that is being held and
+        // needs to be canceled.
+        tap_code(custom_keys[custom_key_down][0]);
+
+        // Reset custom-key state
         custom_keys_tapped[custom_key_down] = true;
         custom_keys_timer[custom_key_down] = 0;
-        custom_key_down = 0;
-        is_custom_key_pressed = false;
+
+        custom_key_down = -1;
     }
 
     /**
-     * TAP-HOLD: HANDLE CUSTOM KEYCODES
+     * TAP-HOLD (2 / 2): HANDLE CUSTOM KEYCODES
      *
      * Handle the keycode if it's within the custom keycodes range. It works in
      * tandem with matrix_scan_user(), which will send the 'letter' keycode when
@@ -427,7 +488,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         } else {
 
             if (!custom_keys_tapped[keyIndex] && timer_elapsed(custom_keys_timer[keyIndex]) < TAPPING_TERM) {
-                register_code(custom_keys[keyIndex][0]);
 
                /*
                 * Problem: During fast typing, letters appeared out of order due
@@ -447,11 +507,24 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 * This improves timing consistency across keys, reducing
                 * out-of-order issues.
                 */
-                wait_ms(35);
-                unregister_code(custom_keys[keyIndex][0]);
+                // Non-blocking tap with delay to match key timing
+                tap_code_delay(custom_keys[keyIndex][0], 35);
+
+                // wait_ms(35);
+                // unregister_code(custom_keys[keyIndex][0]);
             }
 
-            is_custom_key_pressed = false;
+            /**
+             * Reset state
+             */
+
+            /* only clear the "there is a held custom key" flag
+               if we’ve just released THAT key
+               */
+            if (custom_key_down == keyIndex) {
+                is_custom_key_pressed = false;
+                custom_key_down       = -1;
+            }
             custom_keys_timer[keyIndex] = 0;
             custom_keys_tapped[keyIndex] = true;
         }
