@@ -1,11 +1,13 @@
-# kurko's QMK Userspace
+# Alex's QMK userspace
 
 Welcome to my QMK userspace repository! It contains my custom configurations,
 keymaps, and code enhancements for QMK-powered keyboards.
 
-## Keyboards Supported
+## Keyboards supported
 
-- **Sweep**: A minimalist split keyboard with 34 keys.
+- **Aurora Sweep**: A minimalist split keyboard with 34 keys.
+- **Kyria**: A 46 key split keyboard with thumb clusters and encoders (guitar
+    knobs).
 
 ## Features
 
@@ -14,6 +16,10 @@ keymaps, and code enhancements for QMK-powered keyboards.
 - **Custom Macros**: Frequently used commands and shortcuts mapped to single keys.
 - **Combos**: Special actions triggered by pressing multiple keys simultaneously.
 - **One-Shot Modifiers**: Modifiers that apply to the next key pressed without needing to hold them down.
+
+These are not implemented evenly. Some keyboards have more features than
+others, based on their frequency of usage and how challenging they are in
+relation to how many keys they have.
 
 ## Installation
 
@@ -25,6 +31,19 @@ To use these configurations with your QMK setup:
 1. Enable userspace in QMK config using `qmk config user.overlay_dir="$(realpath qmk_userspace)"`
 
 To add new keyboards, add a new keymap for your board using `qmk new-keymap`
+
+## Flashing your keyboard
+
+Once flashing, it will halt and wait for you to double-click the keyboard's
+flash button, which puts the keyboard in bootloader mode.
+
+To push the Kyria, run:
+
+    qmk flash -kb splitkb/kyria/rev2 -km kurko
+
+To push the Aurora Sweep, run:
+
+    qmk flash -kb splitkb/aurora/sweep/rev1 -km kurko -e CONVERT_TO=liatris
 
 ## License
 
