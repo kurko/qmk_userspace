@@ -19,7 +19,6 @@ enum layers {
     _NORMAL = 0,
     _SYM_NUM,
     _FUNCTION,
-    _ADJUST,
 };
 
 
@@ -42,6 +41,8 @@ enum custom_keycodes {
   I_8,
   O_9,
   P_0,
+  QUOT_ENT,
+  KC_OSM_LSFT,
   //...
   END_CUSTOM_KEYCODES, // Always keep this one at the end!
 };
@@ -80,11 +81,16 @@ uint16_t custom_keys_timer[CUSTOM_KEYCODES_LENGTH];
 // The index of the key that is currently being held down
 uint16_t custom_key_down;
 
+// Tap-Hold Variables for QUOT_ENT
+static uint16_t quot_ent_timer = 0;
+static bool quot_ent_active = false;
+// Variables to track Shift state
+static bool is_shift_pressed = false;
+
 // Aliases for readability
 #define NORMAL   DF(_NORMAL)
 #define SYM_NUM  DF(_SYM_NUM)
 #define FKEYS    MO(_FUNCTION)
-#define ADJUST   MO(_ADJUST)
 
 #define CTL_ESC  MT(MOD_LCTL, KC_ESC)
 #define CTL_QUOT MT(MOD_RCTL, KC_QUOTE)
@@ -141,6 +147,42 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    switch (keycode) {
+        /**
+         * QUOT_ENT: Tap for quote, hold for Enter
+         */
+        case QUOT_ENT:
+            if (record->event.pressed) {
+                quot_ent_timer = timer_read();
+                quot_ent_active = true;
+            } else {
+                quot_ent_active = false;
+                if (timer_elapsed(quot_ent_timer) < TAPPING_TERM) {
+                    // Tap: send quote
+                    tap_code(KC_QUOT);
+                } else {
+                    // Hold: send enter
+                    tap_code(KC_ENT);
+                }
+            }
+            return false; // Skip further processing
+
+        /**
+         * KC_OSM_LSFT: One-shot shift modifier
+         */
+        case KC_OSM_LSFT:
+            if (record->event.pressed) {
+                is_shift_pressed = true;
+                register_mods(MOD_BIT(KC_LSFT));
+            } else {
+                is_shift_pressed = false;
+                unregister_mods(MOD_BIT(KC_LSFT));
+            }
+            return false;
+
+        default:
+            break;
+    }
 
     bool is_custom_keycode = keycode >= Q_1 && keycode < END_CUSTOM_KEYCODES;
     /**
@@ -251,9 +293,6 @@ layer_state_t layer_state_set_user(layer_state_t state) {
       case _FUNCTION:
           rgblight_sethsv_noeeprom(148, 255, 100);
           break;
-      case _ADJUST:
-          rgblight_sethsv_noeeprom(148, 255, 130);
-          break;
       default:
           rgblight_sethsv_noeeprom(0, 255, 100);
           break;
@@ -268,22 +307,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * Normal Layer: this is the layer used for writing. The keyboard always gets
  * back to this layer (usually automatically).
  *
- * ,-------------------------------------------.                              ,-------------------------------------------.
- * |  Tab   |   Q  |   W  |   E  |   R  |   T  |                              |   Y  |   U  |   I  |   O  |   P  |  Bksp  |
- * |--------+------+------+------+------+------|                              |------+------+------+------+------+--------|
- * |Ctrl/Esc|   A  |   S  |   D  |   F  |   G  |                              |   H  |   J  |   K  |   L  | ;  : |  ' "   |
- * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+--------|
- * | LShift |   Z  |   X  |   C  |   V  |   B  |      |      |  |  L1  |      |   N  |   M  | ,  < | . >  | /  ? |   \    |
- * `----------------------+------+------+------+--  --+------|  |------+--  --+------+------+------+----------------------'
- *                        |      | LAlt | LGUI | Space|      |  | Temp | Enter| RGUI | RAlt | Menu |
- *                        |      |      |      |      |      |  |  L1  |      |      |      |      |
+ * ,-------------------------------------------.                              ,-------------------------------------------------.
+ * |  Tab   |   Q  |   W  |   E  |   R  |   T  |                              |   Y  |   U  |   I  |   O  |   P  |  Bksp        |
+ * |--------+------+------+------+------+------|                              |------+------+------+------+------+--------------|
+ * |Ctrl/Esc|   A  |   S  |   D  |   F  |   G  |                              |   H  |   J  |   K  |   L  | ;  : | KC_QUOT/Enter|
+ * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+--------------|
+ * | LShift |   Z  |   X  |   C  |   V  |   B  |      | LAlt |  |      |      |   N  |   M  | ,  < | . >  | /  ? |   \          |
+ * `----------------------+------+------+------+------+------|  |------+--  --+------+------+------+----------------------------'
+ *                        |Change| LGUI | Space| Shift|      |  |      | CTRL |  L1  | LGUI |      |
+ *                        |Source|      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
     [_NORMAL] = LAYOUT(
-        KC_TAB,  Q_1,  W_2,  E_3,  R_4,  T_5,                                      Y_6,  U_7,  I_8,     O_9,    P_0,    KC_BSPC,
-        CTL_ESC, KC_A, KC_S, KC_D, KC_F, KC_G,                                     KC_H, KC_J, KC_K,    KC_L,   KC_SCLN, KC_QUOT,
-        KC_LSFT, KC_Z, KC_X, KC_C, KC_V, KC_B,       KC_NO,  KC_NO, TO(1), KC_NO,  KC_N, KC_M, KC_COMM, KC_DOT, KC_SLSH, KC_BSLS,
-                    CHANGE_SOURCE, KC_LALT, KC_LGUI, KC_SPC, KC_NO, TT(1), KC_ENT, KC_RGUI, KC_RALT, KC_NO
+        KC_TAB,  Q_1,  W_2,  E_3,  R_4,  T_5,                                            Y_6,  U_7,  I_8,     O_9,    P_0,     KC_BSPC,
+        CTL_ESC, KC_A, KC_S, KC_D, KC_F, KC_G,                                           KC_H, KC_J, KC_K,    KC_L,   KC_SCLN, QUOT_ENT,
+        KC_LALT, KC_Z, KC_X, KC_C, KC_V, KC_B,   KC_NO,       KC_LALT,   TO(1), KC_NO,   KC_N, KC_M, KC_COMM, KC_DOT, KC_SLSH, KC_BSLS,
+                 CHANGE_SOURCE, KC_LGUI, KC_SPC, KC_OSM_LSFT, KC_NO,     KC_NO, CTL_ESC, TO(1), KC_LGUI, KC_NO
     ),
 
 /*
@@ -294,47 +333,40 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * ,-------------------------------------------.                              ,-------------------------------------------.
  * |  ` ~   |  1 ! |  2 @ |  3 # |  4 $ |  5 % |                              |  6 ^ |  7 & |  8 * |  9 ( |  0 ) |  Bksp  |
  * |--------+------+------+------+------+------|                              |------+------+------+------+------+--------|
- * |Ctrl/Esc|      |      |      |      |      |                              |  - _ |  = + |UArrow|  [ { |  ] } |  -  _  |
+ * |Ctrl/Esc|      |      |      |      |      |                              |  - _ |  = + |UArrow|  [ { |  ] } |  Enter |
  * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+--------|
- * | LShift |      |      |      |      |      |      |      |  |  L2  |      |      |LArrow|DArrow|RArrow|      |        |
- * `----------------------+------+------+------+--  --+------|  |------+------+------+------+------+----------------------'
- *                        |      | LAlt | LGUI | Space|  L1  |  | Temp | Enter| RGUI | RAlt |      |
- *                        |      |      |      |      |      |  |  L2  |      |      |      |      |
+ * | LShift |      |      |      |      |      |      | LAlt |  |      |      |      |LArrow|DArrow|RArrow|      |   L3   |
+ * `----------------------+------+------+------+------+------|  |------+------+------+------+------+----------------------'
+ *                        |      | LGUI | L0   | Shift|      |  |      | CTRL |  L2  | RGUI |      |
+ *                        |      |      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
     [_SYM_NUM] = LAYOUT(
-        KC_GRV,  KC_1,  KC_2,  KC_3,  KC_4,  KC_5,                                       KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_BSPC,
-        CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                      KC_MINS, KC_EQL,  KC_UP,   KC_LBRC, KC_RBRC, CTL_MINS,
-        KC_LSFT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,     KC_NO,  KC_NO,  TO(2),  KC_NO,   KC_NO,   KC_LEFT, KC_DOWN, KC_RGHT, KC_NO,   KC_NO,
-                               KC_NO, KC_LALT, KC_LGUI, KC_SPC, TO(0),  TT(2),  KC_ENT,  KC_RGUI, KC_RALT, KC_NO
+        KC_GRV,  KC_1,  KC_2,  KC_3,  KC_4,  KC_5,                                           KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_BSPC,
+        CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                          KC_MINS, KC_EQL,  KC_UP,   KC_LBRC, KC_RBRC, KC_ENTER,
+        KC_LSFT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,       KC_LALT,    KC_NO, KC_NO,   KC_NO,   KC_LEFT, KC_DOWN, KC_RGHT, KC_NO,   TO(3),
+                             KC_NO, KC_LGUI, TO(0), KC_OSM_LSFT, KC_NO,      KC_NO, CTL_ESC, TO(2),   KC_RGUI, KC_NO
     ),
 
 /*
  * Functions Layer: this focused on function keys and less used keys
  *
- * ,-------------------------------------------.                              ,-------------------------------------------.
- * |        |  F1  |  F2  |  F3  |  F4  |  F5  |                              |  F6  |  F7  |  F8  |  F9  |  F10 |        |
- * |--------+------+------+------+------+------|                              |------+------+------+------+------+--------|
- * |Ctrl/Esc|      |      |      |      |      |                              |      |      |      |      |  F11 |        |
- * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+--------|
- * | LShift |      |      |      |      |      |      |      |  |  L3  |      |      |      |      |      |  F12 |        |
- * `----------------------+------+------+------+--  --+------|  |------+------+------+------+------+----------------------'
- *                        |      | LAlt | LGUI | Space|  L0  |  | Temp | Enter| RGUI | RAlt |      |
- *                        |      |      |      |      |      |  |  L3  |      |      |      |      |
+ * ,-------------------------------------------.                              ,-----------------------------------------.
+ * |        |  F1  |  F2  |  F3  |  F4  |  F5  |                              |  F6  |  F7  |  F8  |  F9  |  F10 | F11  |
+ * |--------+------+------+------+------+------|                              |------+------+------+------+------+------|
+ * |Ctrl/Esc|      |      |      |      |      |                              |      |      |      |      |  F11 |      |
+ * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+------|
+ * | LShift |      |      |      |      |      |      |      |  |      |      |      |      |      |      |  F12 |      |
+ * `----------------------+------+------+------+------+------|  |------+------+------+------+------+--------------------'
+ *                        |      | LGUI | L0   | Shift|      |  |      | CTRL |  L3  | RGUI |      |
+ *                        |      |      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
     [_FUNCTION] = LAYOUT(
-        KC_NO,   KC_F1, KC_F2, KC_F3, KC_F4, KC_F5,                                      KC_F6, KC_F7, KC_F8, KC_F9, KC_F10, KC_NO,
-        CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                      KC_NO, KC_NO, KC_NO, KC_NO, KC_F11, KC_NO,
-        KC_LSFT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,      KC_NO,  KC_NO, TO(3), KC_NO,    KC_NO, KC_NO, KC_NO, KC_NO, KC_F12, KC_NO,
-                               KC_NO, KC_LALT, KC_LGUI,  KC_SPC, TO(0), TT(3), KC_ENT,   KC_LGUI, KC_RALT, KC_NO
-    ),
-
-    [_ADJUST] = LAYOUT(
-      _______, _______, _______, NORMAL , _______, _______,                                    _______, _______, _______, _______,  _______, _______,
-      _______, _______, _______, SYM_NUM, _______, _______,                                    RGB_TOG, RGB_SAI, RGB_HUI, RGB_VAI,  RGB_MOD, _______,
-      _______, _______, _______, _______, _______, _______,_______, _______, TO(0),   _______, _______, RGB_SAD, RGB_HUD, RGB_VAD, RGB_RMOD, _______,
-                                 _______, _______, _______,_______, _______, _______, _______, _______, _______, _______
+        KC_NO,   KC_F1, KC_F2, KC_F3, KC_F4, KC_F5,                                          KC_F6, KC_F7, KC_F8, KC_F9, KC_F10, KC_F11,
+        CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                          KC_NO, KC_NO, KC_NO, KC_NO, KC_F11, KC_NO,
+        KC_LALT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,       KC_NO,      KC_NO, KC_NO,   KC_NO, KC_NO, KC_NO, KC_NO, KC_F12, KC_NO,
+                             KC_NO, KC_LGUI, TO(0), KC_OSM_LSFT, KC_NO,      KC_NO, CTL_ESC, KC_NO, KC_RGUI, KC_NO
     ),
 
  /*
