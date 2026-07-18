@@ -16,9 +16,9 @@
 #include QMK_KEYBOARD_H
 
 enum layers {
-    _NORMAL = 0,
-    _SYM_NUM,
-    _FUNCTION,
+    _LAYER1 = 0,
+    _LAYER2,
+    _LAYER3,
 };
 
 
@@ -41,14 +41,18 @@ enum custom_keycodes {
   I_8,
   O_9,
   P_0,
+  G_OR_HOLD_QUOT,
+  Z_OR_HOLD_GRV,
   QUOT_ENT,
-  KC_OSM_LSFT,
+  END_TAP_HOLD_CUSTOM_KEYCODES, // Marks the end of tap-hold keycodes
+
+  KC_OSM_LSFT,   // Custom keycode for OSM(MOD_LSFT)
   //...
   END_CUSTOM_KEYCODES, // Always keep this one at the end!
 };
 
-// Replace 10 with the number of custom keycodes we have
-#define CUSTOM_KEYCODES_LENGTH (END_CUSTOM_KEYCODES - SAFE_RANGE)
+// Only count tap-hold keycodes, not all custom keycodes
+#define CUSTOM_KEYCODES_LENGTH (END_TAP_HOLD_CUSTOM_KEYCODES - Q_1)
 
 /**
  * Custom keycodes
@@ -69,6 +73,9 @@ uint16_t custom_keys[CUSTOM_KEYCODES_LENGTH][2] = {
     {KC_I, KC_8},
     {KC_O, KC_9},
     {KC_P, KC_0},
+    {KC_G, KC_QUOTE},
+    {KC_Z, KC_GRAVE},
+    {KC_QUOT, KC_ENTER},
 };
 
 // Basic state management for the tap-hold functionality
@@ -81,17 +88,10 @@ uint16_t custom_keys_timer[CUSTOM_KEYCODES_LENGTH];
 // The index of the key that is currently being held down
 uint16_t custom_key_down;
 
-// Tap-Hold Variables for QUOT_ENT
-static uint16_t quot_ent_timer = 0;
-static bool quot_ent_active = false;
 // Variables to track Shift state
 static bool is_shift_pressed = false;
 
 // Aliases for readability
-#define NORMAL   DF(_NORMAL)
-#define SYM_NUM  DF(_SYM_NUM)
-#define FKEYS    MO(_FUNCTION)
-
 #define CTL_ESC  MT(MOD_LCTL, KC_ESC)
 #define CTL_QUOT MT(MOD_RCTL, KC_QUOTE)
 #define CTL_MINS MT(MOD_RCTL, KC_MINUS)
@@ -149,25 +149,6 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         /**
-         * QUOT_ENT: Tap for quote, hold for Enter
-         */
-        case QUOT_ENT:
-            if (record->event.pressed) {
-                quot_ent_timer = timer_read();
-                quot_ent_active = true;
-            } else {
-                quot_ent_active = false;
-                if (timer_elapsed(quot_ent_timer) < TAPPING_TERM) {
-                    // Tap: send quote
-                    tap_code(KC_QUOT);
-                } else {
-                    // Hold: send enter
-                    tap_code(KC_ENT);
-                }
-            }
-            return false; // Skip further processing
-
-        /**
          * KC_OSM_LSFT: One-shot shift modifier
          */
         case KC_OSM_LSFT:
@@ -184,7 +165,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             break;
     }
 
-    bool is_custom_keycode = keycode >= Q_1 && keycode < END_CUSTOM_KEYCODES;
+    bool is_custom_keycode = keycode >= Q_1 && keycode < END_TAP_HOLD_CUSTOM_KEYCODES;
     /**
      * TAP-HOLD: CANCEL HOLD ON ANOTHER KEY ON FAST SEQUENCE
      *
@@ -283,14 +264,14 @@ void matrix_scan_user(void) {
 layer_state_t layer_state_set_user(layer_state_t state) {
 #ifdef RGBLIGHT_ENABLE
     switch (get_highest_layer(state)) {
-      case _NORMAL:
+      case _LAYER1:
           rgblight_sethsv_noeeprom(85, 255, 60);
           break;
-      case _SYM_NUM:
+      case _LAYER2:
           //rgb_matrix_set_color_all(0,0,0);
           rgblight_sethsv_noeeprom(85, 255, 100);
           break;
-      case _FUNCTION:
+      case _LAYER3:
           rgblight_sethsv_noeeprom(148, 255, 100);
           break;
       default:
@@ -318,10 +299,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                        |Source|      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
-    [_NORMAL] = LAYOUT(
-        KC_TAB,  Q_1,  W_2,  E_3,  R_4,  T_5,                                            Y_6,  U_7,  I_8,     O_9,    P_0,     KC_BSPC,
-        CTL_ESC, KC_A, KC_S, KC_D, KC_F, KC_G,                                           KC_H, KC_J, KC_K,    KC_L,   KC_SCLN, QUOT_ENT,
-        KC_LALT, KC_Z, KC_X, KC_C, KC_V, KC_B,   KC_NO,       KC_LALT,   TO(1), KC_NO,   KC_N, KC_M, KC_COMM, KC_DOT, KC_SLSH, KC_BSLS,
+    [_LAYER1] = LAYOUT(
+        KC_TAB,  Q_1,  W_2,  E_3,  R_4,  T_5,                                                     Y_6,  U_7,  I_8,     O_9,    P_0,     KC_BSPC,
+        CTL_ESC, KC_A, KC_S, KC_D, KC_F, G_OR_HOLD_QUOT,                                         KC_H, KC_J, KC_K,    KC_L,   KC_SCLN, QUOT_ENT,
+        KC_LALT, Z_OR_HOLD_GRV, KC_X, KC_C, KC_V, KC_B,   KC_NO,       KC_LALT,   TO(1), KC_NO,   KC_N, KC_M, KC_COMM, KC_DOT, KC_SLSH, KC_BSLS,
                  CHANGE_SOURCE, KC_LGUI, KC_SPC, KC_OSM_LSFT, KC_NO,     KC_NO, CTL_ESC, TO(1), KC_LGUI, KC_NO
     ),
 
@@ -341,7 +322,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                        |      |      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
-    [_SYM_NUM] = LAYOUT(
+    [_LAYER2] = LAYOUT(
         KC_GRV,  KC_1,  KC_2,  KC_3,  KC_4,  KC_5,                                           KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_BSPC,
         CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                          KC_MINS, KC_EQL,  KC_UP,   KC_LBRC, KC_RBRC, KC_ENTER,
         KC_LSFT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,       KC_LALT,    KC_NO, KC_NO,   KC_NO,   KC_LEFT, KC_DOWN, KC_RGHT, KC_NO,   TO(3),
@@ -362,7 +343,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                        |      |      |      |      |      |  |      |/ ESC |      |      |      |
  *                        `----------------------------------'  `----------------------------------'
  */
-    [_FUNCTION] = LAYOUT(
+    [_LAYER3] = LAYOUT(
         KC_NO,   KC_F1, KC_F2, KC_F3, KC_F4, KC_F5,                                          KC_F6, KC_F7, KC_F8, KC_F9, KC_F10, KC_F11,
         CTL_ESC, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,                                          KC_NO, KC_NO, KC_NO, KC_NO, KC_F11, KC_NO,
         KC_LALT, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO, KC_NO,       KC_NO,      KC_NO, KC_NO,   KC_NO, KC_NO, KC_NO, KC_NO, KC_F12, KC_NO,
