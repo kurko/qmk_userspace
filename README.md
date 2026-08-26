@@ -8,6 +8,13 @@ keymaps, and code enhancements for QMK-powered keyboards.
 - **Aurora Sweep**: A minimalist split keyboard with 34 keys.
 - **Kyria**: A 46 key split keyboard with thumb clusters and encoders (guitar
     knobs).
+- **Corne Wireless (Typeractive)**: *Not in this repo.* It runs ZMK rather than
+    QMK -- upstream QMK has no nRF52840 BLE support -- so it is managed
+    separately in [ZMK Studio](https://zmk.studio), on top of the
+    [stock Typeractive config](https://github.com/typeractivexyz/corne-wireless-view-zmk-config).
+    Its `⌃⌥⇧⌘S` input-source key (Lower+Z) mirrors `CHANGE_SOURCE` in the
+    QMK keymaps here, but lives in the keyboard's settings flash rather than in
+    git: a reflash or a "Restore Stock Settings" in Studio wipes it.
 
 ## Features
 
